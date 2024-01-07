@@ -4,8 +4,8 @@
 
 #include "nm120.h"
 #include "stupid_delay.h"
-
-#include "spi.h"
+#include "winbond_w25q32bv.h"
+#include "uart.h"
 
 #define LED_port GPIOC
 #define LED_Blue (1 << 8)
@@ -51,30 +51,25 @@ int main(void) {
 	init_blue_led();
 	init_green_led();
 	delay_init();
-	//nm120_init();
-	spi_init();
-	while(1){
+	nm120_init();
+//	winbond_init();
+//	uart_init();
+
+/*	winbond_dump_memory_start();
+	unsigned int address = 0;
+	while(address++ != 0x400000) {
+		GPIO_setBit(LED_port, LED_Blue);
+		unsigned char data = winbond_dump_memory();
+		GPIO_clearBit(LED_port, LED_Blue);
+		uart_write(data);
+	}
+	GPIO_setBit(LED_port, LED_Green);
+	while(1);*/
+	while(1) {
 		GPIO_setBit(LED_port, LED_Blue);
 		delay_ms(100);
 		GPIO_clearBit(LED_port, LED_Blue);
 		delay_ms(100);
-	/*	unsigned char chip_version = nm120_version();
-		if (chip_version == 0x11 ||
-		    chip_version == 0x12 ||
-		    chip_version == 0x21 ||
-		    chip_version == 0x22 ||
-		    chip_version == 0x23 ||
-		    chip_version == 0x24 ||
-		    chip_version == 0x14) {
-			GPIO_setBit(LED_port, LED_Green);
-		} else {
-			GPIO_clearBit(LED_port, LED_Green);
-		}*/
-		unsigned char test = spi_read();
-		if (test != 0xaa) {
-			GPIO_setBit(LED_port, LED_Green);
-			while(1);
-		}
 	}
+	return 0;
 }
-

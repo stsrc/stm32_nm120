@@ -19,8 +19,12 @@ void i2c_init() {
 	I2C1->CR1 |= I2C_CR1_PE;
 }
 
-static void i2c_start(const unsigned char address) {
+static void i2c_start(const unsigned char address,
+		      const unsigned char ack) {
 	I2C1->CR1 &= ~I2C_CR1_STOP;
+	if (ack) {
+		I2C1->CR1 |= I2C_CR1_ACK;
+	}
 	I2C1->CR1 |= I2C_CR1_START;
 	while(!(I2C1->SR1 & I2C_SR1_SB));
 	I2C1->DR = address;
@@ -31,7 +35,7 @@ static void i2c_start(const unsigned char address) {
 void i2c_write(const unsigned char address,
 	       const unsigned char *buffer,
 	       const unsigned int size) {
-	i2c_start(address);
+	i2c_start(address, 0U);
 	for (unsigned int i = 0U; i < size; i++) {
 		I2C1->DR = buffer[i];
 		while(!(I2C1->SR1 & I2C_SR1_BTF));
@@ -42,9 +46,9 @@ void i2c_write(const unsigned char address,
 }
 
 void i2c_read(const unsigned char address,
-	      unsigned char *buffer,
-	      const unsigned int size) {
-	i2c_start(address);
+              unsigned char *buffer,
+              const unsigned int size) {
+	i2c_start(address, 1U);
 	if (size == 1U) {
 		I2C1->CR1 &= ~I2C_CR1_ACK;
 		I2C1->CR1 |= I2C_CR1_STOP;

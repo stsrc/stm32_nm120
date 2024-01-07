@@ -2,6 +2,6 @@
 #define _NM120_H_
 
 void nm120_init();
-unsigned char nm120_version();
+unsigned int nm120_chip_id();
 
 #endif
