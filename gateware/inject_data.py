@@ -19,6 +19,12 @@ class InjectData(Elaboratable):
         self.usb_stream_out = StreamInterface(name="usb_stream_out")
         self.debug_byte = Signal(8)
 
+        self.adc_data = Signal(16)
+        self.adc_mem_addr = Signal(9)
+        self.adc_trig = Signal()
+        self.adc_limit = Signal(9)
+        self.adc_done = Signal()
+
     def get_bus(self):
         return self.simple_ports_to_wb.bus
 
@@ -30,9 +36,15 @@ class InjectData(Elaboratable):
         usb_last = Signal()
         usb_payload = Signal(8)
         payload = Signal(32)
-        counter = Signal(11)
-        bit_rotate = Signal(8)
-        state = Signal(8)
+        counter = Signal(10)
+
+        adc_done_in_1 = Signal()
+        adc_done_in = Signal()
+
+        m.d.sync += [
+            adc_done_in_1.eq(self.adc_done),
+            adc_done_in.eq(adc_done_in_1)
+        ]
 
         m.d.comb += [
             usb_first.eq(self.usb_stream_in.first),
@@ -41,17 +53,12 @@ class InjectData(Elaboratable):
             usb_payload.eq(self.usb_stream_in.payload)
         ]
 
-        m.d.comb += self.debug_byte.eq(state)
-        m.d.comb += bit_rotate.eq((3 - (counter % 4)) * 8)
-
         with m.FSM(reset="RESET"):
             with m.State("RESET"):
-                m.d.sync += state.eq(0b11110000)
                 m.d.sync += self.wait_counter.eq(0)
                 m.next = "WAIT_BEFORE_START"
 
             with m.State("WAIT_BEFORE_START"):
-                m.d.sync += state.eq(0b11001100)
                 m.d.sync += self.wait_counter.eq(self.wait_counter + 1)
                 if self.simulation:
                     m.d.sync += self.wait_counter.eq(30000000)
@@ -69,28 +76,41 @@ class InjectData(Elaboratable):
             with m.State("RECEIVE_DATA_FROM_USB"):
                 with m.If(usb_valid):
                     m.d.comb += self.usb_stream_in.ready.eq(1)
-                    m.d.sync += counter.eq(counter + 1)
-                    m.d.sync += payload.eq((usb_payload << bit_rotate) | payload)
-                    with m.If((usb_last) | (counter > 3)):
-                        m.d.sync += counter.eq(0)
-                        m.next = "SEND_DATA_TO_USB"
+                    with m.If(~usb_last):
+                        m.d.sync += self.adc_limit.eq((usb_payload & 0x01) << 8)
+                    with m.Else():
+                        m.d.sync += self.adc_limit.eq(self.adc_limit | usb_payload)
+                        m.next = "WAIT_FOR_ADC"
+                        m.d.sync += self.adc_trig.eq(1)
 
-            with m.State("SEND_DATA_TO_USB"):
+            with m.State("WAIT_FOR_ADC"):
                 m.d.comb += self.usb_stream_in.ready.eq(0)
+                m.d.sync += self.adc_trig.eq(0)
+                with m.If(self.adc_limit == 0):
+                    m.next = "IDLE";
+                with m.Elif(adc_done_in):
+                    m.next = "SEND_DATA_TO_USB"
+    
+            with m.State("SEND_DATA_TO_USB"):
                 with m.If(self.usb_stream_out.ready):
                     m.d.comb += self.usb_stream_out.valid.eq(1)
-                    m.d.comb += self.usb_stream_out.payload.eq(payload >> bit_rotate)
                     m.d.sync += counter.eq(counter + 1)
+                    with m.If(counter & 1 == 0):                         
+                        m.d.comb += self.usb_stream_out.payload.eq((self.adc_data & 0xff00) >> 8)
+                    with m.Elif(counter & 1 == 1):
+                        m.d.comb += self.usb_stream_out.payload.eq(self.adc_data & 0xff)
+                        m.d.sync += self.adc_mem_addr.eq(self.adc_mem_addr + 1)
+
                     with m.If(counter == 0):
                         m.d.comb += self.usb_stream_out.first.eq(1)
                         m.d.comb += self.usb_stream_out.last.eq(0)
-                    with m.Elif(counter == 3):
-                        m.d.sync += counter.eq(0)
+                    with m.Elif(self.adc_mem_addr == self.adc_limit - 1):
                         m.d.comb += self.usb_stream_out.last.eq(1)
+                        m.d.sync += self.adc_mem_addr.eq(0)
                         m.next = "IDLE"
-                        m.d.sync += state.eq(state + 1)
                     with m.Else():
                         m.d.comb += self.usb_stream_out.first.eq(0)    
+
                 with m.Else():
                     m.d.comb += self.usb_stream_out.valid.eq(0)
 

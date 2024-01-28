@@ -35,9 +35,9 @@ class ArrowDECAClockAndResetController(Elaboratable):
             p_INCLK0_INPUT_FREQUENCY = 16666,
             p_COMPENSATE_CLOCK       = "CLK0",
             p_INTENDED_DEVICE_FAMILY = "MAX 10",
-            p_CLK1_DIVIDE_BY         = 1,
+            p_CLK1_DIVIDE_BY         = 6, # 12
             p_CLK1_DUTY_CYCLE        = 50,
-            p_CLK1_MULTIPLY_BY       = 2,
+            p_CLK1_MULTIPLY_BY       = 21, # 21
             p_CLK1_PHASE_SHIFT       = 0,
             p_OPERATION_MODE         = "NORMAL",
 
@@ -156,6 +156,14 @@ class ArrowDECAPlatform(IntelPlatform, LUNAPlatform):
             Subsignal("mdc",    Pins("R5", dir="o")),
             Attrs(io_standard="2.5 V")
         ),
+
+        Resource("adc", 0,
+            Subsignal("data", Pins("W18 Y18 Y19 AA17 AA20 AA19 AB21 AB20 AB19 Y16 V16 AB18 V15 W17")),
+            Subsignal("encode", Pins("AB17 AA16")),
+            Subsignal("ovr", Pins("AB16")),
+            Subsignal("dry", Pins("W16")),
+            Attrs(io_standard="3.3-V LVCMOS")
+        ),
     ]
 
     connectors  = [
@@ -171,15 +179,6 @@ class ArrowDECAPlatform(IntelPlatform, LUNAPlatform):
             "W3"),
 
         Connector("P", 8, {
-            "3":  "W18",   "4": "Y18",
-            "5":  "Y19",   "6": "AA17",
-            "7":  "AA20",  "8": "AA19",
-            "9":  "AB21", "10": "AB20",
-            "11": "AB19", "12": "Y16",
-            "13": "V16",  "14": "AB18",
-            "15": "V15",  "16": "W17",
-            "17": "AB17", "18": "AA16",
-            "19": "AB16", "20": "W16",
             "21": "AB15", "22": "W15",
             "23": "Y14",  "24": "AA15",
             "25": "AB14", "26": "AA14",
@@ -208,6 +207,13 @@ class ArrowDECAPlatform(IntelPlatform, LUNAPlatform):
             "31": "P9",
             "41": "V17", "42": "W3"}),
     ]
+
+    def toolchain_prepare(self, fragment, name, **kwargs):
+        overrides = {
+            "add_constraints":
+                 "derive_pll_clocks"
+        }
+        return super().toolchain_prepare(fragment, name, **overrides, **kwargs)
 
     def toolchain_program(self, products, name):
         quartus_pgm = os.environ.get("QUARTUS_PGM", "quartus_pgm")

@@ -7,6 +7,7 @@ import os
 from amaranth            import *
 
 from inject_data import InjectData
+from adc         import ADC
 
 from luna                import top_level_cli
 from luna.usb2           import USBDevice
@@ -20,6 +21,8 @@ from luna.gateware.usb.usb2.endpoints.stream  import USBStreamInEndpoint, USBStr
 from luna.gateware.usb.usb2.request           import USBRequestHandler, StallOnlyRequestHandler
 
 from requesthandlers        import VendorRequestHandlers
+
+from amaranth_soc import memory
 
 class USB2AdcInterface(Elaboratable):
     """ USB ADC interface """
@@ -97,8 +100,22 @@ class USB2AdcInterface(Elaboratable):
 
         m.submodules.inject_data = inject_data = DomainRenamer("usb")(InjectData(simulation=False))
 
+        m.submodules.adc = adc = DomainRenamer("fast")(ADC())
+        connector = platform.request("adc")
+        
+        for i in range(14):
+            m.d.comb += adc.adc[i].eq(connector.data.i[i])
+        m.d.comb += [
+            adc.over_range.eq(connector.ovr.i),
+            connector.encode.o[0].eq(adc.encode[0]),
+            connector.encode.o[1].eq(adc.encode[1]),
+            adc.dry.eq(connector.dry.i),
+        ]
+
         buttons = platform.request("button")
         m.d.comb += ResetSignal("usb").eq(buttons.i[0])
+        m.d.comb += ResetSignal("fast").eq(buttons.i[0])
+
         leds = Cat([platform.request("led", i).o for i in range(8)])
 
         ulpi = platform.request(platform.default_usb_connection)
@@ -139,6 +156,24 @@ class USB2AdcInterface(Elaboratable):
         m.d.comb += inject_data.usb_stream_in.stream_eq(ep3_out.stream)
         m.d.comb += ep2_in.stream.stream_eq(inject_data.usb_stream_out)
         m.d.comb += leds.eq(inject_data.debug_byte)
+        m.d.comb += leds.eq(adc.data & 0xff)
+
+        adc_memory = Memory(width=16, depth=512, name="adc_memory", simulate=False)
+
+        m.submodules.adc_memory_read_port = adc_mem_r = adc_memory.read_port(domain="comb")
+        m.submodules.adc_memory_write_port = adc_mem_w = DomainRenamer("fast")
+                                             (adc_memory.write_port(granularity=16))
+
+        m.d.comb += [
+            adc_mem_w.addr.eq(adc.addr),
+            adc_mem_w.data.eq(adc.data),
+            adc_mem_w.en.eq(adc.data_ready),
+            adc_mem_r.addr.eq(inject_data.adc_mem_addr),
+            inject_data.adc_data.eq(adc_mem_r.data),
+            inject_data.adc_done.eq(adc.done),
+            adc.trig.eq(inject_data.adc_trig),
+            adc.limit.eq(inject_data.adc_limit)
+        ]
 
         # Connect our device as a high speed device
         m.d.comb += [
