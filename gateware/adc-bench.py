@@ -23,8 +23,8 @@ if __name__ == "__main__":
                 yield dut.dry.eq(1)
                 yield Tick()
                 yield dut.dry.eq(0)
+                yield dut.adc.eq(dut.adc + 1)
             yield Tick()
-            yield dut.adc.eq(dut.adc + 1)
         for i in range(512):
             yield Tick()
       

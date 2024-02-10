@@ -24,7 +24,10 @@ class ADCInjectDataBench(Elaboratable):
         m.submodules.adc = adc = DomainRenamer("fast")(ADC(simulation=True))
         adc_memory = Memory(width=16, depth=512, name="adc_memory", simulate=True)
         m.submodules.adc_memory_write_port = adc_mem_w = DomainRenamer("fast")(adc_memory.write_port(granularity=16))
-        m.submodules.adc_memory_read_port = adc_mem_r = adc_memory.read_port(domain="comb")
+        m.submodules.adc_memory_read_port = adc_mem_r = adc_memory.read_port(domain="usb")
+
+
+
         m.d.comb += [
             adc_mem_w.addr.eq(adc.addr),
             adc_mem_w.data.eq(adc.data),
@@ -39,11 +42,10 @@ class ADCInjectDataBench(Elaboratable):
             adc.adc.eq(self.adc_data),
             adc.over_range.eq(self.adc_over_range),
             adc.dry.eq(self.adc_dry),
-            self.adc_en.eq(adc.encode)
+            self.adc_en.eq(adc.encode),
         ]
 
         return m
-
 
 from amaranth.sim import Simulator, Tick
 
@@ -56,14 +58,14 @@ if __name__ == "__main__":
         words_to_transfer = 1
 
         for i in range(words_to_transfer_max):
-            yield dut.usb_stream_in.payload.eq((words_to_transfer & 0x100) >> 8)
+            yield dut.usb_stream_in.payload.eq(words_to_transfer & 0xff)
             yield dut.usb_stream_in.first.eq(1)
             yield dut.usb_stream_in.valid.eq(1)
             yield Tick(domain="usb")
             while((yield dut.usb_stream_in.ready) == 0):
                 yield Tick(domain="usb")
             yield dut.usb_stream_in.first.eq(0)
-            yield dut.usb_stream_in.payload.eq(words_to_transfer & 0xff)
+            yield dut.usb_stream_in.payload.eq((words_to_transfer & 0x100) >> 8)
             yield dut.usb_stream_in.last.eq(1)
             yield Tick(domain="usb")
             while((yield dut.usb_stream_in.ready) == 0):
@@ -78,6 +80,8 @@ if __name__ == "__main__":
                 yield Tick(domain="usb")
             yield dut.usb_stream_out.ready.eq(0)
             words_to_transfer += 1
+        for i in range(100):
+            yield Tick(domain="usb")
 
     def process_adc_input():
         yield dut.adc_data.eq(0)
@@ -95,6 +99,7 @@ if __name__ == "__main__":
                 yield dut.adc_data.eq(dut.adc_data + 1)
       
     sim = Simulator(dut)
+#    sim.add_clock(1.0/1e6,)
     sim.add_clock(1.0/60e6, domain="usb")
     sim.add_clock(1.0/200e6, domain="fast")
     sim.add_sync_process(process_inject_data_input, domain="usb")

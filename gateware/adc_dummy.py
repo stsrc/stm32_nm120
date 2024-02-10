@@ -10,7 +10,7 @@ from amaranth_soc import memory
 
 __all__ = ["ADC"]
 
-class ADC(Elaboratable):
+class ADC_dummy(Elaboratable):
     def __init__(self, simulation=False):
 
         # ADC signals
@@ -51,6 +51,7 @@ class ADC(Elaboratable):
         trig_1 = Signal()
         trig = Signal()
 
+        counter = Signal(14)
 
         m.d.sync += [
             trig_1.eq(self.trig),
@@ -93,15 +94,16 @@ class ADC(Elaboratable):
 
             with m.State("RECEIVE"):
                 self.reset_encode(m)
-                with m.If(self.dry):
-                    m.d.comb += self.data.eq((self.over_range << 14) | self.adc)
-                    m.d.comb += self.data_ready.eq(1)
-                    m.d.sync += self.addr.eq(self.addr + 1)
-                    with m.If(self.addr == limit):
-                        m.d.sync += self.addr.eq(0)
-                        m.next = "IDLE"
-                        m.d.sync += self.done.eq(1)
-                    with m.Else():
-                        m.next = "TRIGGER"
+                m.d.comb += self.data.eq((self.over_range << 14) | counter)
+                m.d.comb += self.data_ready.eq(1)
+                m.d.sync += self.addr.eq(self.addr + 1)
+                m.d.sync += counter.eq(counter + 1)
+                with m.If(self.addr == limit):
+                    m.d.sync += counter.eq(0)
+                    m.d.sync += self.addr.eq(0)
+                    m.next = "IDLE"
+                    m.d.sync += self.done.eq(1)
+                with m.Else():
+                    m.next = "TRIGGER"
                     
         return m

@@ -8,5 +8,8 @@ modules.order
 *.ko
 *.mod*
 
+*.vcd
+
+gateware/build
 gateware/venv
 gateware/__pycache__

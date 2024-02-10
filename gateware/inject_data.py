@@ -55,6 +55,7 @@ class InjectData(Elaboratable):
 
         with m.FSM(reset="RESET"):
             with m.State("RESET"):
+                m.d.sync += counter.eq(0)
                 m.d.sync += self.wait_counter.eq(0)
                 m.next = "WAIT_BEFORE_START"
 
@@ -77,9 +78,9 @@ class InjectData(Elaboratable):
                 with m.If(usb_valid):
                     m.d.comb += self.usb_stream_in.ready.eq(1)
                     with m.If(~usb_last):
-                        m.d.sync += self.adc_limit.eq((usb_payload & 0x01) << 8)
+                        m.d.sync += self.adc_limit.eq(usb_payload)
                     with m.Else():
-                        m.d.sync += self.adc_limit.eq(self.adc_limit | usb_payload)
+                        m.d.sync += self.adc_limit.eq(self.adc_limit | ((usb_payload & 0x01) << 8))
                         m.next = "WAIT_FOR_ADC"
                         m.d.sync += self.adc_trig.eq(1)
 
@@ -95,7 +96,7 @@ class InjectData(Elaboratable):
                 with m.If(self.usb_stream_out.ready):
                     m.d.comb += self.usb_stream_out.valid.eq(1)
                     m.d.sync += counter.eq(counter + 1)
-                    with m.If(counter & 1 == 0):                         
+                    with m.If(counter & 1 == 0):
                         m.d.comb += self.usb_stream_out.payload.eq((self.adc_data & 0xff00) >> 8)
                     with m.Elif(counter & 1 == 1):
                         m.d.comb += self.usb_stream_out.payload.eq(self.adc_data & 0xff)
@@ -104,7 +105,8 @@ class InjectData(Elaboratable):
                     with m.If(counter == 0):
                         m.d.comb += self.usb_stream_out.first.eq(1)
                         m.d.comb += self.usb_stream_out.last.eq(0)
-                    with m.Elif(self.adc_mem_addr == self.adc_limit - 1):
+                    with m.Elif(counter == ((self.adc_limit << 1) - 1)):
+                        m.d.sync += counter.eq(0)
                         m.d.comb += self.usb_stream_out.last.eq(1)
                         m.d.sync += self.adc_mem_addr.eq(0)
                         m.next = "IDLE"
