@@ -13,3 +13,5 @@ modules.order
 gateware/build
 gateware/venv
 gateware/__pycache__
+
+userspace/adc_test
